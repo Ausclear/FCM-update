@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AusClear Messages</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes successSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .animate-pulse { animation: pulse 2s infinite; }
+        .animate-success { animation: successSlideIn 0.3s ease-out; }
+        
+        .widget-header-blue {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        
+        .filter-active-blue {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        
+        .compose-btn-blue {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        
+        .compose-btn-blue:hover {
+            background: linear-gradient(135deg, #1a3468 0%, #25488a 100%);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Zoho SDK -->
+    <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+    
+    <!-- Firebase SDK with Push Notifications - FIXED VERSION -->
+    <script type="module">
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAByQ9hn2jzpl0vQ0YmI8yKkiEMlfNn_qk",
+            authDomain: "ausclear-portal-4166a.firebaseapp.com",
+            projectId: "ausclear-portal-4166a",
+            storageBucket: "ausclear-portal-4166a.firebasestorage.app",
+            messagingSenderId: "174515892387",
+            appId: "1:174515892387:web:bbc901582ed4b6a24dcf16"
+        };
+
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            getDocs, 
+            deleteDoc,
+            doc,
+            onSnapshot,
+            serverTimestamp,
+            query,
+            where,
+            orderBy,
+            updateDoc,
+            setDoc
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { 
+            getMessaging, 
+            getToken, 
+            onMessage 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
+
+        // Initialize Firebase
+        let app, db, messaging;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            messaging = getMessaging(app);
+            
+            // Make available globally
+            window.firebaseDb = db;
+            window.firebaseMessaging = messaging;
+            window.firebaseModules = {
+                collection,
+                addDoc,
+                deleteDoc,
+                doc,
+                onSnapshot,
+                serverTimestamp,
+                query,
+                where,
+                orderBy,
+                updateDoc,
+                setDoc,
+                getDocs
+            };
+            
+            console.log('✅ Firebase initialized successfully');
+            
+            // VAPID key - REPLACE WITH YOUR ACTUAL KEY FROM FIREBASE CONSOLE
+            // Go to Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
+            const vapidKey = 'BOEDzPpNMczZcGbVhv_zEkWUVdOp_EYgBw8edtj5QqoGmYLmRiOFznJi6NLTepn-p_LHjCyMbHVXSdmxw7egNUE';
+            
+            // Create a minimal service worker inline for testing
+            const createServiceWorker = () => {
+                const swCode = `
+                    console.log('🔧 Service Worker starting...');
+                    
+                    // Import Firebase scripts for service worker
+                    importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+                    importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+                    
+                    console.log('📦 Firebase scripts loaded in SW');
+                    
+                    // Initialize Firebase in service worker
+                    firebase.initializeApp({
+                        apiKey: "AIzaSyAByQ9hn2jzpl0vQ0YmI8yKkiEMlfNn_qk",
+                        authDomain: "ausclear-portal-4166a.firebaseapp.com",
+                        projectId: "ausclear-portal-4166a",
+                        storageBucket: "ausclear-portal-4166a.firebasestorage.app",
+                        messagingSenderId: "174515892387",
+                        appId: "1:174515892387:web:bbc901582ed4b6a24dcf16"
+                    });
+                    
+                    console.log('🔥 Firebase initialized in SW');
+                    
+                    const messaging = firebase.messaging();
+                    
+                    console.log('📨 Messaging instance created in SW');
+                    
+                    // Handle background messages
+                    messaging.onBackgroundMessage(function(payload) {
+                        console.log('📨 Background Message received in SW:', payload);
+                        
+                        if (payload.notification) {
+                            const notificationTitle = payload.notification.title || 'AusClear Message';
+                            const notificationOptions = {
+                                body: payload.notification.body || 'You have a new message',
+                                icon: payload.notification.icon || '/favicon.ico',
+                                badge: '/favicon.ico',
+                                tag: 'ausclear-message',
+                                requireInteraction: true,
+                                data: payload.data || {}
+                            };
+                            
+                            console.log('🔔 Showing background notification:', notificationTitle);
+                            return self.registration.showNotification(notificationTitle, notificationOptions);
+                        }
+                    });
+                    
+                    // Handle notification clicks
+                    self.addEventListener('notificationclick', function(event) {
+                        console.log('👆 Notification clicked:', event.notification.tag);
+                        event.notification.close();
+                        
+                        // Focus or open the app window
+                        event.waitUntil(
+                            clients.matchAll({ type: 'window' }).then(function(clientList) {
+                                for (let i = 0; i < clientList.length; i++) {
+                                    const client = clientList[i];
+                                    if (client.url === self.location.origin && 'focus' in client) {
+                                        return client.focus();
+                                    }
+                                }
+                                if (clients.openWindow) {
+                                    return clients.openWindow('/');
+                                }
+                            })
+                        );
+                    });
+                    
+                    console.log('✅ Service Worker setup complete');
+                `;
+                
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                return URL.createObjectURL(blob);
+            };
+            
+            // Enhanced push notification initialization with better debugging
+            window.initializePushNotifications = async function() {
+                try {
+                    console.log('🔔 Starting FCM initialization...');
+                    
+                    // Check browser support
+                    if (!('serviceWorker' in navigator)) {
+                        throw new Error('Service Workers not supported');
+                    }
+                    
+                    if (!('Notification' in window)) {
+                        throw new Error('Notifications not supported');
+                    }
+
+                    // Check if already running in secure context
+                    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                        console.warn('⚠️ FCM requires HTTPS in production');
+                        console.log('🌐 Current protocol:', location.protocol);
+                        console.log('🌐 Current hostname:', location.hostname);
+                    }
+
+                    // Request notification permission first
+                    let permission = Notification.permission;
+                    console.log('🔔 Current permission:', permission);
+                    
+                    if (permission === 'default') {
+                        console.log('🔔 Requesting notification permission...');
+                        permission = await Notification.requestPermission();
+                    }
+                    
+                    if (permission !== 'granted') {
+                        throw new Error(`Notification permission ${permission}`);
+                    }
+
+                    console.log('✅ Notification permission granted');
+
+                    // Register service worker with fallback
+                    let registration;
+                    try {
+                        // Try to register the standard service worker first
+                        registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                        console.log('✅ Standard service worker registered');
+                    } catch (swError) {
+                        console.log('⚠️ Standard SW failed, creating inline SW:', swError.message);
+                        
+                        // Create and register inline service worker
+                        const swUrl = createServiceWorker();
+                        registration = await navigator.serviceWorker.register(swUrl);
+                        console.log('✅ Inline service worker registered');
+                    }
+                    
+                    // Wait for service worker to be ready
+                    await navigator.serviceWorker.ready;
+                    console.log('✅ Service Worker ready');
+
+                    // Debug VAPID key
+                    console.log('🔑 Using VAPID key:', vapidKey.substring(0, 20) + '...');
+                    console.log('🔑 VAPID key length:', vapidKey.length);
+                    
+                    // Get FCM token with proper configuration
+                    console.log('🔔 Requesting FCM token...');
+                    console.log('🔔 Registration:', registration);
+                    
+                    const token = await getToken(messaging, { 
+                        vapidKey: vapidKey,
+                        serviceWorkerRegistration: registration 
+                    });
+                    
+                    if (!token) {
+                        throw new Error('No FCM token generated - possible VAPID key issue');
+                    }
+                    
+                    console.log('✅ FCM Token generated successfully');
+                    console.log('📱 Token length:', token.length);
+                    console.log('📱 Token preview:', token.substring(0, 50) + '...');
+                    
+                    // Store token if client ID is available
+                    if (window.currentClientId && token) {
+                        await storeFCMToken(window.currentClientId, token);
+                        console.log('✅ FCM token stored for client:', window.currentClientId);
+                    }
+                    
+                    // Send test notification to confirm everything works
+                    const testNotification = new Notification('🎉 FCM Setup Complete!', {
+                        body: `Token generated successfully! Length: ${token.length} chars`,
+                        icon: '/favicon.ico',
+                        badge: '/favicon.ico',
+                        tag: 'fcm-ready',
+                        requireInteraction: true
+                    });
+                    
+                    // Auto-close test notification after 7 seconds
+                    setTimeout(() => {
+                        testNotification.close();
+                    }, 7000);
+                    
+                    return token;
+                    
+                } catch (error) {
+                    console.error('❌ FCM initialization failed:', error);
+                    console.log('🔍 Error details:', {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code
+                    });
+                    
+                    // Try basic notifications as fallback
+                    try {
+                        const fallbackNotification = new Notification('⚠️ FCM Failed', {
+                            body: `FCM setup failed: ${error.message}. Using basic notifications.`,
+                            icon: '/favicon.ico'
+                        });
+                        
+                        setTimeout(() => {
+                            fallbackNotification.close();
+                        }, 7000);
+                        
+                        return 'basic-notifications-only';
+                    } catch (fallbackError) {
+                        console.error('❌ Even basic notifications failed:', fallbackError);
+                        throw new Error(`All notification methods failed: ${error.message}`);
+                    }
+                }
+            };
+            
+            // Improved FCM token storage
+            async function storeFCMToken(clientId, token) {
+                try {
+                    console.log('💾 Storing FCM token for client:', clientId);
+                    
+                    const tokenRef = doc(db, 'fcm_tokens', clientId);
+                    
+                    const tokenData = {
+                        token: token,
+                        clientId: clientId,
+                        createdAt: serverTimestamp(),
+                        lastUpdated: serverTimestamp(),
+                        active: true,
+                        userAgent: navigator.userAgent,
+                        url: window.location.href,
+                        platform: navigator.platform,
+                        language: navigator.language
+                    };
+                    
+                    await setDoc(tokenRef, tokenData, { merge: true });
+                    
+                    console.log('✅ FCM token stored successfully in Firebase');
+                    console.log('📋 Token data stored for client:', clientId);
+                    
+                } catch (error) {
+                    console.error('❌ Error storing FCM token:', error);
+                    throw error;
+                }
+            }
+            
+            // Enhanced foreground message handler
+            onMessage(messaging, (payload) => {
+                console.log('📨 Foreground FCM message received:', payload);
+                
+                // Show browser notification
+                if (payload.notification) {
+                    const notification = new Notification(payload.notification.title, {
+                        body: payload.notification.body,
+                        icon: payload.notification.icon || '/favicon.ico',
+                        badge: '/favicon.ico',
+                        tag: 'fcm-message',
+                        requireInteraction: true,
+                        data: payload.data
+                    });
+                    
+                    // Handle notification click
+                    notification.onclick = function(event) {
+                        event.preventDefault();
+                        window.focus();
+                        notification.close();
+                    };
+                }
+                
+                // If there's custom data, you can handle it here
+                if (payload.data) {
+                    console.log('📊 Message data:', payload.data);
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Firebase initialization error:', error);
+        }
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // Utility functions
+        const formatFileSize = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+
+        const formatDate = (timestamp) => {
+            if (!timestamp) return 'Unknown';
+            const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 3600000) {
+                const minutes = Math.floor(diff / 60000);
+                return `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
+            } else if (diff < 86400000) {
+                const hours = Math.floor(diff / 3600000);
+                return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+            } else {
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
+        };
+
+        // Enhanced Debug Console Component
+        const DebugConsole = ({ logs }) => (
+            <div className="bg-black text-green-400 p-3 mx-5 my-3 rounded-md font-mono text-xs max-h-32 overflow-y-auto relative">
+                <div className="flex justify-between items-center mb-2">
+                    <strong>🐛 FCM DEBUG LOG:</strong>
+                    <button
+                        onClick={() => {
+                            const logText = logs.map(log => `[${log.timestamp}] ${log.message}`).join('\n');
+                            navigator.clipboard.writeText(logText).then(() => {
+                                alert('Debug logs copied to clipboard!');
+                            }).catch(() => {
+                                const textArea = document.createElement('textarea');
+                                textArea.value = logText;
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(textArea);
+                                alert('Debug logs copied to clipboard!');
+                            });
+                        }}
+                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                        title="Copy debug logs to clipboard"
+                    >
+                        📋 Copy
+                    </button>
+                </div>
+                {logs.map((log, index) => (
+                    <div key={index} className={`${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-yellow-400'}`}>
+                        [{log.timestamp}] {log.message}
+                    </div>
+                ))}
+            </div>
+        );
+
+        // Connection Status Component
+        const ConnectionStatus = ({ status, message }) => (
+            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-xs flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                    status === 'connected' ? 'bg-green-500' :
+                    status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                    'bg-red-500'
+                }`}></div>
+                <span>{message}</span>
+            </div>
+        );
+
+        // Message Filters Component
+        const MessageFilters = ({ currentFilter, onFilterChange, unreadCount }) => {
+            const filters = [
+                { key: 'all', label: '📨 All Messages', count: null, show: true },
+                { key: 'unread', label: '📭 Unread', count: unreadCount, show: unreadCount > 0 },
+                { key: 'sent', label: '📤 To Client', count: null, show: true },
+                { key: 'received', label: '📥 From Client', count: null, show: true },
+                { key: 'urgent', label: '🔴 Urgent', count: null, show: true },
+                { key: 'security', label: '🔒 Security', count: null, show: true },
+                { key: 'admin', label: '📋 Admin', count: null, show: true },
+                { key: 'technical', label: '💻 Technical', count: null, show: true }
+            ];
+
+            return (
+                <div className="flex gap-2 px-5 pt-4 overflow-x-auto scrollbar-thin">
+                    {filters.filter(filter => filter.show).map(filter => (
+                        <button
+                            key={filter.key}
+                            onClick={() => onFilterChange(filter.key)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 border ${
+                                currentFilter === filter.key
+                                    ? 'filter-active-blue text-white border-blue-700'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300'
+                            }`}
+                        >
+                            {filter.label} {filter.count !== null && `(${filter.count})`}
+                        </button>
+                    ))}
+                </div>
+            );
+        };
+
+        // File Upload Component
+        const FileUpload = ({ selectedFiles, onFilesChange }) => {
+            const fileInputRef = useRef(null);
+            const [dragOver, setDragOver] = useState(false);
+
+            const handleFileSelection = (files) => {
+                const validFiles = [];
+                
+                for (let file of files) {
+                    if (file.size > 10 * 1024 * 1024) {
+                        alert(`File "${file.name}" is too large. Maximum size is 10MB.`);
+                        continue;
+                    }
+                    
+                    const allowedTypes = ['application/pdf', 'application/msword', 
+                                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                        'image/jpeg', 'image/jpg', 'image/png'];
+                    
+                    if (!allowedTypes.includes(file.type)) {
+                        alert(`File "${file.name}" is not allowed. Only PDF, DOC, DOCX, JPG, PNG files are permitted.`);
+                        continue;
+                    }
+                    
+                    if (selectedFiles.length + validFiles.length >= 5) {
+                        alert('Maximum 5 files allowed per message.');
+                        break;
+                    }
+                    
+                    validFiles.push(file);
+                }
+                
+                if (validFiles.length > 0) {
+                    onFilesChange([...selectedFiles, ...validFiles]);
+                }
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setDragOver(false);
+                handleFileSelection(Array.from(e.dataTransfer.files));
+            };
+
+            const removeFile = (index) => {
+                const newFiles = selectedFiles.filter((_, i) => i !== index);
+                onFilesChange(newFiles);
+            };
+
+            return (
+                <div className="space-y-3">
+                    <div 
+                        className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
+                            dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400'
+                        }`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+                        onDrop={handleDrop}
+                    >
+                        <div className="text-4xl mb-3">📎</div>
+                        <div className="text-base font-semibold text-gray-900 mb-2">Tap to upload files</div>
+                        <div className="text-sm text-gray-500">PDF, DOC, DOCX, JPG, PNG only (Max 10MB)</div>
+                        
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            onChange={(e) => handleFileSelection(Array.from(e.target.files))}
+                        />
+                    </div>
+
+                    {selectedFiles.length > 0 && (
+                        <div className="space-y-2">
+                            {selectedFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-blue-600">📄</span>
+                                        <div>
+                                            <div className="text-sm font-medium text-gray-900">{file.name}</div>
+                                            <div className="text-xs text-gray-500">{formatFileSize(file.size)}</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeFile(index)}
+                                        className="text-red-500 hover:bg-red-50 rounded p-1 transition-colors w-8 h-8 flex items-center justify-center"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Message Item Component
+        const MessageItem = ({ message, onRead, onReply, onDelete, onMarkRead }) => {
+            const isUnread = message.fromType === 'client' && !message.readStatus;
+            
+            return (
+                <div 
+                    className={`bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 relative group ${
+                        isUnread ? 'border-l-4 border-l-blue-600 bg-blue-50' : ''
+                    }`}
+                    onClick={() => onRead(message.id)}
+                >
+                    {isUnread && (
+                        <div className="absolute top-3 right-3 w-3 h-3 bg-blue-600 rounded-full border-2 border-white animate-pulse"></div>
+                    )}
+                    
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="font-semibold text-gray-900 text-sm flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">
+                                {message.fromName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            </div>
+                            From: {message.fromName}
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${
+                            message.priority === 'high' ? 'bg-red-100 text-red-700' :
+                            message.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                        }`}>
+                            {message.priority}
+                        </span>
+                    </div>
+                    
+                    <div className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                        {message.subject}
+                        {message.attachments?.length > 0 && (
+                            <span className="text-blue-600 text-sm">📎 {message.attachments.length}</span>
+                        )}
+                    </div>
+                    
+                    <div className="text-gray-600 text-sm mb-3 line-clamp-2">{message.message}</div>
+                    
+                    <div className="flex justify-between items-center text-xs text-gray-500">
+                        <div className="flex items-center gap-2">
+                            <span>{formatDate(message.timestamp)}</span>
+                            {message.category && (
+                                <span className="px-2 py-1 bg-gray-100 rounded-full text-xs">
+                                    📂 {message.category}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            {isUnread && (
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); onMarkRead(message.id); }}
+                                    className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                                >
+                                    Mark Read
+                                </button>
+                            )}
+                            {message.readStatus && (
+                                <span className="text-green-600 font-medium flex items-center gap-1">
+                                    ✓ Read
+                                </span>
+                            )}
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onReply(message.id); }}
+                                className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                            >
+                                Reply
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(message.id); }}
+                                className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Modal Component
+        const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-2xl" }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className={`bg-white rounded-xl shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}>
+                        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                            <h3 className="text-xl font-bold text-gray-900">{title}</h3>
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Success Modal Component
+        const SuccessModal = ({ isOpen, onClose, title, message, type = "success" }) => {
+            if (!isOpen) return null;
+
+            const icons = {
+                success: { emoji: '✅', color: 'text-green-500' },
+                error: { emoji: '❌', color: 'text-red-500' },
+                delete: { emoji: '🗑️', color: 'text-red-500' },
+                read: { emoji: '✅', color: 'text-green-500' }
+            };
+
+            const icon = icons[type] || icons.success;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-sm w-full text-center p-6 animate-success">
+                        <div className={`text-4xl mb-4 ${icon.color}`}>
+                            {icon.emoji}
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+                        <p className="text-gray-600 text-sm mb-6">{message}</p>
+                        <button
+                            onClick={onClose}
+                            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // Confirmation Modal Component
+        const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText, type = "danger" }) => {
+            if (!isOpen) return null;
+
+            const typeStyles = {
+                danger: { 
+                    icon: '🗑️', 
+                    confirmBg: 'bg-red-600 hover:bg-red-700',
+                    iconColor: 'text-red-500'
+                },
+                info: { 
+                    icon: '✅', 
+                    confirmBg: 'bg-blue-600 hover:bg-blue-700',
+                    iconColor: 'text-blue-500'
+                }
+            };
+
+            const style = typeStyles[type] || typeStyles.danger;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-sm w-full text-center p-6">
+                        <div className={`text-3xl mb-4 ${style.iconColor}`}>
+                            {style.icon}
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+                        <p className="text-gray-600 text-sm mb-6 whitespace-pre-line">{message}</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={onClose}
+                                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={onConfirm}
+                                className={`flex-1 text-white px-4 py-2 rounded-lg transition-colors ${style.confirmBg}`}
+                            >
+                                {confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Enhanced push notification initialization with better error handling
+        const initializePushNotificationsWithClientId = async (clientId, debugLog) => {
+            if (!clientId) {
+                debugLog('❌ Cannot initialize push notifications - no client ID provided', 'error');
+                return null;
+            }
+            
+            debugLog(`🔔 Initializing FCM for client: ${clientId}`, 'info');
+            
+            try {
+                window.currentClientId = clientId;
+                const token = await window.initializePushNotifications();
+                
+                if (token && token !== 'basic-notifications-only') {
+                    debugLog(`✅ FCM token generated: ${token.substring(0, 20)}...`, 'success');
+                } else if (token === 'basic-notifications-only') {
+                    debugLog(`⚠️ Basic notifications only (FCM failed)`, 'warning');
+                } else {
+                    debugLog(`❌ No FCM token generated`, 'error');
+                }
+                
+                return token;
+            } catch (error) {
+                debugLog(`❌ FCM initialization failed: ${error.message}`, 'error');
+                return null;
+            }
+        };
+
+        // Main AusClear Messages Component
+        const AusClearMessages = () => {
+            // State management
+            const [connectionStatus, setConnectionStatus] = useState({ status: 'connecting', message: 'Connecting...' });
+            const [debugLogs, setDebugLogs] = useState([]);
+            const [clientName, setClientName] = useState('Loading...');
+            const [clientId, setClientId] = useState(null);
+            const [clientRecord, setClientRecord] = useState(null);
+            const [zohoUser, setZohoUser] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [currentFilter, setCurrentFilter] = useState('all');
+            const [filteredMessages, setFilteredMessages] = useState([]);
+            const [fcmToken, setFcmToken] = useState(null);
+            
+            // Modal states
+            const [composeModal, setComposeModal] = useState(false);
+            const [readModal, setReadModal] = useState({ isOpen: false, message: null });
+            const [successModal, setSuccessModal] = useState({ isOpen: false, title: '', message: '', type: 'success' });
+            const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: '', type: 'danger' });
+            
+            // Form states
+            const [composeForm, setComposeForm] = useState({
+                category: '',
+                priority: 'medium',
+                subject: '',
+                body: ''
+            });
+            const [selectedFiles, setSelectedFiles] = useState([]);
+
+            // Refs
+            const messagesListener = useRef(null);
+            const db = useRef(null);
+
+            // Enhanced debug logging function
+            const debugLog = useCallback((message, type = 'info') => {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = { timestamp, message, type };
+                setDebugLogs(prev => [...prev.slice(-15), logEntry]); // Keep last 15 logs
+                console.log(`[FCM DEBUG ${timestamp}] ${message}`);
+            }, []);
+
+            // Zoho Signal notification function
+            const triggerZohoNotification = async (message) => {
+                try {
+                    if (message.fromType !== 'client' || message.readStatus) {
+                        debugLog('🔇 Skipping notification - not an unread client message', 'info');
+                        return;
+                    }
+                    
+                    debugLog(`🔔 Triggering Zoho signal for message: ${message.subject}`, 'info');
+                    
+                    if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
+                        const signalData = {
+                            signals: [{
+                                signal_namespace: "ausclear.messages",
+                                subject: "New Client Message",
+                                message: `📨 New message from ${message.fromName}: "${message.subject}"`,
+                                actions: [{
+                                    type: "link",
+                                    display_name: "View Message",
+                                    url: `#/messages/${message.id}`
+                                }]
+                            }]
+                        };
+                        
+                        await ZOHO.CRM.API.sendNotification(signalData);
+                        debugLog('✅ Zoho signal sent successfully', 'success');
+                    } else {
+                        debugLog('⚠️ Zoho CRM API not available - signal not sent', 'warning');
+                    }
+                } catch (error) {
+                    debugLog(`❌ Failed to send Zoho signal: ${error.message}`, 'error');
+                }
+            };
+
+            // Initialize Firebase and Zoho
+            useEffect(() => {
+                const initialize = async () => {
+                    try {
+                        debugLog('🚀 Initializing Firebase...', 'info');
+                        
+                        if (window.firebaseDb && window.firebaseModules) {
+                            db.current = window.firebaseDb;
+                            setConnectionStatus({ status: 'connected', message: 'Connected' });
+                            debugLog('✅ Firebase initialized successfully', 'success');
+                            
+                            await initializeZohoIntegration();
+                        } else {
+                            debugLog('⚠️ Firebase modules not loaded - waiting...', 'warning');
+                            setTimeout(initialize, 500);
+                        }
+                    } catch (error) {
+                        debugLog(`❌ Initialization failed: ${error.message}`, 'error');
+                        setConnectionStatus({ status: 'error', message: 'Connection failed' });
+                        
+                        // Emergency fallback
+                        const fallbackClientId = 'CPI-27280-PP';
+                        setClientId(fallbackClientId);
+                        setClientName('Peter PARKINSON (Emergency)');
+                        window.currentClientId = fallbackClientId;
+                        if (window.firebaseDb) {
+                            db.current = window.firebaseDb;
+                            setupRealtimeListener(fallbackClientId);
+                            await initializePushNotificationsWithClientId(fallbackClientId, debugLog);
+                        }
+                    }
+                };
+
+                initialize();
+            }, [debugLog]);
+
+            // Initialize Zoho SDK
+            const initializeZohoIntegration = async () => {
+                try {
+                    debugLog('🔌 Initializing Zoho integration...', 'info');
+                    
+                    await getCurrentZohoUser();
+                    
+                    if (typeof ZOHO === 'undefined' || !ZOHO.embeddedApp) {
+                        debugLog('⚠️ Zoho Embedded App not available - using fallback client', 'warning');
+                        const fallbackClientId = 'CPI-27280-PP';
+                        setClientId(fallbackClientId);
+                        setClientName('Peter PARKINSON (Fallback)');
+                        window.currentClientId = fallbackClientId;
+                        
+                        setupRealtimeListener(fallbackClientId);
+                        const token = await initializePushNotificationsWithClientId(fallbackClientId, debugLog);
+                        setFcmToken(token);
+                        return;
+                    }
+                    
+                    ZOHO.embeddedApp.on("PageLoad", function(data) {
+                        debugLog(`📋 Zoho PageLoad: ${JSON.stringify(data)}`, 'info');
+                        
+                        if (data.Entity && data.EntityId) {
+                            debugLog(`🎯 Found Entity: ${data.Entity}, ID: ${data.EntityId[0]}`, 'info');
+                            getClientDetails(data.EntityId[0]);
+                        } else {
+                            debugLog('⚠️ No Entity/EntityId in PageLoad data - using fallback', 'warning');
+                            const fallbackClientId = 'CPI-27280-PP';
+                            setClientId(fallbackClientId);
+                            setClientName('Peter PARKINSON (No Entity)');
+                            window.currentClientId = fallbackClientId;
+                            setupRealtimeListener(fallbackClientId);
+                            initializePushNotificationsWithClientId(fallbackClientId, debugLog).then(setFcmToken);
+                        }
+                    });
+
+                    ZOHO.embeddedApp.init();
+                    debugLog('✅ Zoho SDK initialized', 'success');
+                    
+                } catch (error) {
+                    debugLog(`❌ Zoho integration error: ${error.message}`, 'error');
+                    const fallbackClientId = 'CPI-27280-PP';
+                    setClientId(fallbackClientId);
+                    setClientName('Peter PARKINSON (Error)');
+                    window.currentClientId = fallbackClientId;
+                    setupRealtimeListener(fallbackClientId);
+                    const token = await initializePushNotificationsWithClientId(fallbackClientId, debugLog);
+                    setFcmToken(token);
+                }
+            };
+
+            // Get current Zoho user
+            const getCurrentZohoUser = async () => {
+                try {
+                    debugLog('👤 Getting current Zoho user...', 'info');
+                    
+                    if (typeof ZOHO === 'undefined' || !ZOHO.CRM || !ZOHO.CRM.CONFIG) {
+                        debugLog('⚠️ Zoho CRM API not available - running in standalone mode', 'warning');
+                        setZohoUser({ full_name: 'AusClear Staff', email: 'staff@ausclear.gov.au' });
+                        return;
+                    }
+                    
+                    const userResponse = await ZOHO.CRM.CONFIG.getCurrentUser();
+                    debugLog(`📋 User API Response: ${JSON.stringify(userResponse)}`, 'info');
+                    
+                    if (userResponse && userResponse.users && userResponse.users[0]) {
+                        setZohoUser(userResponse.users[0]);
+                        debugLog(`✅ Current user: ${userResponse.users[0].full_name} (${userResponse.users[0].email})`, 'success');
+                    } else {
+                        debugLog('⚠️ No user data returned', 'warning');
+                        setZohoUser({ full_name: 'AusClear Staff', email: 'staff@ausclear.gov.au' });
+                    }
+                } catch (error) {
+                    debugLog(`❌ Error getting current user: ${error.message}`, 'error');
+                    debugLog('📝 This is normal when running outside Zoho - using fallback user', 'info');
+                    setZohoUser({ full_name: 'AusClear Staff', email: 'staff@ausclear.gov.au' });
+                }
+            };
+
+            // Get client details from Zoho
+            const getClientDetails = async (recordId) => {
+                try {
+                    debugLog(`🔍 Getting client details for record: ${recordId}`, 'info');
+                    
+                    if (typeof ZOHO === 'undefined' || !ZOHO.CRM || !ZOHO.CRM.API) {
+                        debugLog('⚠️ Zoho CRM API not available - using record ID as client', 'warning');
+                        setClientId(recordId);
+                        setClientName(`Client ${recordId}`);
+                        window.currentClientId = recordId;
+                        setupRealtimeListener(recordId);
+                        const token = await initializePushNotificationsWithClientId(recordId, debugLog);
+                        setFcmToken(token);
+                        return;
+                    }
+                    
+                    const response = await ZOHO.CRM.API.getRecord({
+                        Entity: "Sponsored_Clients",
+                        RecordID: recordId
+                    });
+
+                    debugLog(`📡 API Response: ${JSON.stringify(response)}`, 'info');
+
+                    if (response.data && response.data.length > 0) {
+                        const client = response.data[0];
+                        setClientRecord(client);
+                        setClientName(client.Name || 'Unknown Client');
+                        
+                        const clientSponsorshipNumber = client.Client_Sponsorship_Number || recordId;
+                        setClientId(clientSponsorshipNumber);
+                        window.currentClientId = clientSponsorshipNumber;
+                        debugLog(`✅ Client: ${client.Name} (${clientSponsorshipNumber})`, 'success');
+                        
+                        setupRealtimeListener(clientSponsorshipNumber);
+                        const token = await initializePushNotificationsWithClientId(clientSponsorshipNumber, debugLog);
+                        setFcmToken(token);
+                    } else {
+                        debugLog(`❌ No client data found for record: ${recordId}`, 'error');
+                        setClientId(recordId);
+                        setClientName('Unknown Client');
+                        window.currentClientId = recordId;
+                        setupRealtimeListener(recordId);
+                        const token = await initializePushNotificationsWithClientId(recordId, debugLog);
+                        setFcmToken(token);
+                    }
+                } catch (error) {
+                    debugLog(`❌ Error getting client details: ${error.message}`, 'error');
+                    debugLog('📝 Using fallback client data', 'info');
+                    const fallbackClientId = recordId || 'CPI-27280-PP';
+                    setClientId(fallbackClientId);
+                    setClientName('Peter PARKINSON (API Error)');
+                    window.currentClientId = fallbackClientId;
+                    setupRealtimeListener(fallbackClientId);
+                    const token = await initializePushNotificationsWithClientId(fallbackClientId, debugLog);
+                    setFcmToken(token);
+                }
+            };
+
+            // Setup real-time Firebase listener
+            const setupRealtimeListener = (targetClientId) => {
+                debugLog(`📡 Setting up real-time listener for client: ${targetClientId}`, 'info');
+
+                try {
+                    const { collection, query, where, orderBy, onSnapshot } = window.firebaseModules;
+                    const messagesRef = collection(db.current, 'ausclear_messages');
+                    const q = query(
+                        messagesRef,
+                        where('clientId', '==', targetClientId),
+                        orderBy('timestamp', 'desc')
+                    );
+
+                    messagesListener.current = onSnapshot(q, (snapshot) => {
+                        debugLog(`📨 Firebase snapshot received: ${snapshot.docs.length} documents`, 'info');
+                        
+                        const allMessages = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+
+                        debugLog(`✅ Loaded ${allMessages.length} messages for client ${targetClientId}`, 'success');
+                        setMessages(allMessages);
+                        
+                        snapshot.docChanges().forEach(change => {
+                            debugLog(`🔄 Change detected: ${change.type} - ${change.doc.id}`, 'info');
+                        });
+                        
+                    }, (error) => {
+                        debugLog(`❌ Firebase listener error: ${error.message}`, 'error');
+                        setConnectionStatus({ status: 'error', message: 'Firebase error' });
+                    });
+
+                    setConnectionStatus({ status: 'connected', message: 'Connected' });
+                    debugLog('✅ Firebase real-time listener active', 'success');
+
+                } catch (error) {
+                    debugLog(`❌ Error setting up listener: ${error.message}`, 'error');
+                    setConnectionStatus({ status: 'error', message: 'Setup failed' });
+                }
+            };
+
+            // Filter messages based on current filter
+            useEffect(() => {
+                let filtered = messages;
+
+                switch(currentFilter) {
+                    case 'unread':
+                        filtered = messages.filter(m => m.fromType === 'client' && !m.readStatus);
+                        break;
+                    case 'sent':
+                        filtered = messages.filter(m => m.fromType === 'staff');
+                        break;
+                    case 'received':
+                        filtered = messages.filter(m => m.fromType === 'client');
+                        break;
+                    case 'urgent':
+                        filtered = messages.filter(m => m.priority === 'high');
+                        break;
+                    case 'security':
+                        filtered = messages.filter(m => m.category === 'security');
+                        break;
+                    case 'admin':
+                        filtered = messages.filter(m => m.category === 'admin');
+                        break;
+                    case 'technical':
+                        filtered = messages.filter(m => m.category === 'technical');
+                        break;
+                    default:
+                        filtered = messages;
+                }
+
+                setFilteredMessages(filtered);
+            }, [messages, currentFilter]);
+
+            // Calculate unread count
+            const unreadCount = messages.filter(m => m.fromType === 'client' && !m.readStatus).length;
+
+            // Message actions
+            const handleReadMessage = (messageId) => {
+                const message = messages.find(m => m.id === messageId);
+                if (!message) return;
+
+                setReadModal({ isOpen: true, message });
+
+                if (message.fromType === 'client' && !message.readStatus) {
+                    markAsRead(messageId);
+                }
+            };
+
+            const markAsRead = async (messageId) => {
+                try {
+                    debugLog(`🎯 MARK AS READ STARTED: ${messageId}`, 'info');
+                    
+                    if (messageId.startsWith('demo')) {
+                        debugLog(`📋 DEMO MESSAGE - updating locally only`, 'info');
+                        
+                        setMessages(prevMessages => {
+                            return prevMessages.map(m => {
+                                if (m.id === messageId) {
+                                    debugLog(`✅ Found and updating demo message: ${messageId}`, 'success');
+                                    return { ...m, readStatus: true, readAt: new Date() };
+                                }
+                                return m;
+                            });
+                        });
+                        
+                        setSuccessModal({
+                            isOpen: true,
+                            title: 'Marked as Read!',
+                            message: 'The message has been marked as read.',
+                            type: 'read'
+                        });
+                        debugLog(`✅ DEMO MARK AS READ COMPLETE`, 'success');
+                        return;
+                    }
+                    
+                    debugLog(`🔥 FIREBASE MESSAGE - updating in Firebase: ${messageId}`, 'info');
+                    
+                    if (db.current && window.firebaseModules) {
+                        const { doc, updateDoc, serverTimestamp } = window.firebaseModules;
+                        const messageRef = doc(db.current, 'ausclear_messages', messageId);
+                        
+                        debugLog(`🔄 Calling Firebase updateDoc for message: ${messageId}`, 'info');
+                        await updateDoc(messageRef, {
+                            readStatus: true,
+                            readAt: serverTimestamp()
+                        });
+                        debugLog(`✅ Firebase updateDoc completed - message will refresh shortly`, 'success');
+                    }
+                    
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Marked as Read!',
+                        message: 'The message has been marked as read.',
+                        type: 'read'
+                    });
+                } catch (error) {
+                    debugLog(`❌ ERROR in markAsRead: ${error.message}`, 'error');
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Error',
+                        message: `Failed to mark message as read: ${error.message}`,
+                        type: 'error'
+                    });
+                }
+            };
+
+            const deleteMessage = async (messageId) => {
+                try {
+                    debugLog(`🗑️ Deleting message: ${messageId}`, 'info');
+                    
+                    if (messageId.startsWith('demo')) {
+                        debugLog(`📋 Demo message - deleting locally only`, 'info');
+                        setMessages(prevMessages => 
+                            prevMessages.filter(m => m.id !== messageId)
+                        );
+                        
+                        setSuccessModal({
+                            isOpen: true,
+                            title: 'Message Deleted!',
+                            message: 'The demo message has been deleted.',
+                            type: 'delete'
+                        });
+                        return;
+                    }
+                    
+                    if (db.current && window.firebaseModules) {
+                        const { doc, deleteDoc } = window.firebaseModules;
+                        const messageRef = doc(db.current, 'ausclear_messages', messageId);
+                        await deleteDoc(messageRef);
+                        debugLog(`✅ Message ${messageId} deleted from Firebase`, 'success');
+                    }
+                    
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Message Deleted!',
+                        message: 'The message has been permanently deleted.',
+                        type: 'delete'
+                    });
+                } catch (error) {
+                    debugLog(`❌ Error deleting message: ${error.message}`, 'error');
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Error',
+                        message: `Failed to delete message: ${error.message}`,
+                        type: 'error'
+                    });
+                }
+            };
+
+            const handleDeleteMessage = (messageId) => {
+                const message = messages.find(m => m.id === messageId);
+                if (!message) return;
+
+                setConfirmModal({
+                    isOpen: true,
+                    title: 'Delete Message',
+                    message: `Are you sure you want to delete this message?\n\n"${message.subject}"`,
+                    confirmText: 'Delete',
+                    type: 'danger',
+                    onConfirm: () => {
+                        setConfirmModal({ ...confirmModal, isOpen: false });
+                        deleteMessage(messageId);
+                    }
+                });
+            };
+
+            const handleMarkRead = (messageId) => {
+                const message = messages.find(m => m.id === messageId);
+                if (!message) return;
+
+                setConfirmModal({
+                    isOpen: true,
+                    title: 'Mark as Read',
+                    message: `Mark this message as read?\n\n"${message.subject}"`,
+                    confirmText: 'Mark Read',
+                    type: 'info',
+                    onConfirm: () => {
+                        setConfirmModal({ ...confirmModal, isOpen: false });
+                        markAsRead(messageId);
+                    }
+                });
+            };
+
+            const handleReplyToMessage = (messageId) => {
+                const message = messages.find(m => m.id === messageId);
+                if (message) {
+                    setComposeForm({
+                        ...composeForm,
+                        subject: `RE: ${message.subject.replace(/^RE:\s*/i, '')}`,
+                        category: message.category || 'admin'
+                    });
+                    setComposeModal(true);
+                }
+                setReadModal({ isOpen: false, message: null });
+            };
+
+            // Compose message
+            const handleSendMessage = async (e) => {
+                e.preventDefault();
+                
+                if (!composeForm.subject || !composeForm.body || !composeForm.category) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+
+                try {
+                    debugLog('📤 Sending message...', 'info');
+                    
+                    const fromName = clientRecord?.Owner?.name || zohoUser?.full_name || 'AusClear Support Team';
+                    
+                    if (db.current && window.firebaseModules) {
+                        const { collection, addDoc, serverTimestamp } = window.firebaseModules;
+                        
+                        const message = {
+                            fromType: 'staff',
+                            fromId: 'staff_user',
+                            fromName: fromName,
+                            toId: clientId,
+                            toName: clientName,
+                            clientId: clientId,
+                            subject: composeForm.subject,
+                            message: composeForm.body,
+                            priority: composeForm.priority,
+                            category: composeForm.category,
+                            timestamp: serverTimestamp(),
+                            deliveryStatus: 'delivered',
+                            readStatus: true,
+                            threadId: `thread_${clientId}_${Date.now()}`
+                        };
+
+                        const messagesRef = collection(db.current, 'ausclear_messages');
+                        await addDoc(messagesRef, message);
+                    }
+                    
+                    debugLog('✅ Message sent successfully', 'success');
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Message Sent Successfully!',
+                        message: `Your message has been delivered to ${clientName}.`,
+                        type: 'success'
+                    });
+                    
+                    setComposeModal(false);
+                    setComposeForm({ category: '', priority: 'medium', subject: '', body: '' });
+                    setSelectedFiles([]);
+                    
+                } catch (error) {
+                    debugLog(`❌ Error sending message: ${error.message}`, 'error');
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Error',
+                        message: `Failed to send message: ${error.message}`,
+                        type: 'error'
+                    });
+                }
+            };
+
+                    // Enhanced test notifications function with better debugging
+            const testNotifications = async () => {
+                try {
+                    debugLog('🧪 Starting comprehensive FCM test...', 'info');
+                    
+                    // Step 1: Check environment
+                    debugLog(`🌐 Protocol: ${location.protocol}`, 'info');
+                    debugLog(`🌐 Hostname: ${location.hostname}`, 'info');
+                    debugLog(`🔔 Notification support: ${'Notification' in window}`, 'info');
+                    debugLog(`⚙️ Service Worker support: ${'serviceWorker' in navigator}`, 'info');
+                    
+                    // Step 2: Check current permission
+                    const currentPermission = Notification.permission;
+                    debugLog(`🔐 Current permission: ${currentPermission}`, 'info');
+                    
+                    if (currentPermission !== 'granted') {
+                        debugLog('🔓 Requesting notification permission...', 'info');
+                        const newPermission = await Notification.requestPermission();
+                        debugLog(`🔐 Permission result: ${newPermission}`, newPermission === 'granted' ? 'success' : 'error');
+                        
+                        if (newPermission !== 'granted') {
+                            throw new Error(`Permission denied: ${newPermission}`);
+                        }
+                    }
+                    
+                    // Step 3: Test basic notification first
+                    debugLog('📱 Testing basic notification...', 'info');
+                    const basicNotification = new Notification('🧪 Basic Test', {
+                        body: 'If you see this, basic notifications work!',
+                        icon: '/favicon.ico'
+                    });
+                    setTimeout(() => basicNotification.close(), 3000);
+                    debugLog('✅ Basic notification sent', 'success');
+                    
+                    // Step 4: Wait a moment, then test FCM
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    debugLog('🔥 Testing FCM token generation...', 'info');
+                    const result = await window.initializePushNotifications();
+                    
+                    if (result && result !== 'basic-notifications-only') {
+                        debugLog(`🎉 FCM SUCCESS! Token: ${result.substring(0, 30)}...`, 'success');
+                        setFcmToken(result);
+                        
+                        // Send success notification
+                        const successNotification = new Notification('🎉 FCM Test Successful!', {
+                            body: `FCM is working! Token generated (${result.length} chars)`,
+                            icon: '/favicon.ico',
+                            requireInteraction: true
+                        });
+                        
+                        setTimeout(() => successNotification.close(), 8000);
+                        
+                    } else if (result === 'basic-notifications-only') {
+                        debugLog('⚠️ FCM failed, but basic notifications work', 'warning');
+                        
+                        const warningNotification = new Notification('⚠️ Partial Success', {
+                            body: 'Basic notifications work, but FCM token generation failed',
+                            icon: '/favicon.ico'
+                        });
+                        
+                        setTimeout(() => warningNotification.close(), 5000);
+                        
+                    } else {
+                        debugLog('❌ FCM test failed completely', 'error');
+                        throw new Error('FCM initialization returned null');
+                    }
+                    
+                } catch (error) {
+                    debugLog(`❌ Test failed: ${error.message}`, 'error');
+                    debugLog(`🔍 Error stack: ${error.stack}`, 'error');
+                    
+                    // Show error notification
+                    try {
+                        const errorNotification = new Notification('❌ Test Failed', {
+                            body: `FCM test failed: ${error.message}`,
+                            icon: '/favicon.ico'
+                        });
+                        setTimeout(() => errorNotification.close(), 5000);
+                    } catch (notifError) {
+                        debugLog(`❌ Cannot even show error notification: ${notifError.message}`, 'error');
+                        alert(`FCM test failed: ${error.message}`);
+                    }
+                }
+            };
+
+            // Cleanup
+            useEffect(() => {
+                return () => {
+                    if (messagesListener.current) {
+                        messagesListener.current();
+                    }
+                };
+            }, []);
+
+            return (
+                <div className="h-screen bg-gray-50 flex flex-col">
+                    {/* Header */}
+                    <div className="widget-header-blue text-white p-6 flex-shrink-0 relative">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-lg font-semibold">
+                                    💬 AusClear Messages - {clientName}
+                                </h1>
+                                {fcmToken && (
+                                    <span className="bg-green-500 text-white px-2 py-1 rounded text-xs">
+                                        🔔 FCM Active
+                                    </span>
+                                )}
+                            </div>
+                            <ConnectionStatus status={connectionStatus.status} message={connectionStatus.message} />
+                        </div>
+                    </div>
+
+                    {/* Message Filters */}
+                    <MessageFilters 
+                        currentFilter={currentFilter}
+                        onFilterChange={setCurrentFilter}
+                        unreadCount={unreadCount}
+                    />
+
+                    {/* Messages Container */}
+                    <div className="flex-1 overflow-y-auto p-5 min-h-0">
+                        {filteredMessages.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="text-6xl mb-4 opacity-50">
+                                    {currentFilter === 'unread' ? '📭' : 
+                                     currentFilter === 'sent' ? '📤' :
+                                     currentFilter === 'urgent' ? '🔴' :
+                                     currentFilter === 'security' ? '🔒' :
+                                     currentFilter === 'admin' ? '📋' :
+                                     currentFilter === 'technical' ? '💻' : '📭'}
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                    {currentFilter === 'all' ? 'No messages found' :
+                                     currentFilter === 'unread' ? 'All caught up!' :
+                                     currentFilter === 'sent' ? 'No sent messages' :
+                                     currentFilter === 'urgent' ? 'No urgent messages' :
+                                     `No ${currentFilter} messages`}
+                                </h3>
+                                <p className="text-gray-500">
+                                    {currentFilter === 'all' ? 'No messages match the current filter.' :
+                                     currentFilter === 'unread' ? 'All your messages have been read.' :
+                                     `No ${currentFilter} messages found. Try checking other categories.`}
+                                </p>
+                                {currentFilter !== 'all' && (
+                                    <button
+                                        onClick={() => setCurrentFilter('all')}
+                                        className="mt-4 px-4 py-2 filter-active-blue text-white rounded-lg hover:opacity-90 transition-all"
+                                    >
+                                        View All Messages
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="text-sm text-gray-600 mb-4">
+                                    Showing {filteredMessages.length} {filteredMessages.length === 1 ? 'message' : 'messages'}
+                                    {currentFilter !== 'all' && ` in ${currentFilter}`}
+                                </div>
+                                {filteredMessages.map((message) => (
+                                    <MessageItem
+                                        key={message.id}
+                                        message={message}
+                                        onRead={handleReadMessage}
+                                        onReply={handleReplyToMessage}
+                                        onDelete={handleDeleteMessage}
+                                        onMarkRead={handleMarkRead}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Enhanced Debug Console */}
+                    <div className="flex-shrink-0 border-t border-gray-200">
+                        <DebugConsole logs={debugLogs} />
+                        <div className="px-5 py-3 bg-gray-100 border-t border-gray-200 flex flex-wrap gap-2 items-center">
+                            <button
+                                onClick={testNotifications}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                            >
+                                🔔 Test FCM
+                            </button>
+                            
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const permission = await Notification.requestPermission();
+                                        debugLog(`🔔 Permission request result: ${permission}`, permission === 'granted' ? 'success' : 'warning');
+                                        
+                                        if (permission === 'granted') {
+                                            new Notification('Permission Granted! 🎉', {
+                                                body: 'Notifications are now enabled',
+                                                icon: '/favicon.ico'
+                                            });
+                                        }
+                                    } catch (error) {
+                                        debugLog(`❌ Permission request failed: ${error.message}`, 'error');
+                                    }
+                                }}
+                                className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                            >
+                                🔓 Request Permission
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    debugLog('🔄 Clearing debug logs...', 'info');
+                                    setDebugLogs([]);
+                                }}
+                                className="px-3 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
+                            >
+                                🗑️ Clear Logs
+                            </button>
+                            
+                            <div className="text-xs text-gray-600 flex gap-4">
+                                <span>Permission: <strong>{typeof Notification !== 'undefined' ? Notification.permission : 'Unknown'}</strong></span>
+                                <span>SW Support: <strong>{'serviceWorker' in navigator ? '✅' : '❌'}</strong></span>
+                                <span>Protocol: <strong>{location.protocol}</strong></span>
+                                {fcmToken && (
+                                    <span className="text-green-600">FCM: <strong>✅ Active</strong></span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Floating Compose Button */}
+                    <button
+                        onClick={() => setComposeModal(true)}
+                        className="compose-btn-blue fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-lg hover:scale-105 transition-transform z-40"
+                        title="Compose Message to Client"
+                    >
+                        ✉️
+                    </button>
+
+                    {/* Compose Modal */}
+                    <Modal
+                        isOpen={composeModal}
+                        onClose={() => setComposeModal(false)}
+                        title="Send Message to Client"
+                    >
+                        <form onSubmit={handleSendMessage} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
+                                <input
+                                    type="text"
+                                    value={clientRecord?.Owner?.name || zohoUser?.full_name || 'AusClear Support Team'}
+                                    readOnly
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Category (Department)</label>
+                                <select
+                                    value={composeForm.category}
+                                    onChange={(e) => setComposeForm({ ...composeForm, category: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    required
+                                >
+                                    <option value="">Select department...</option>
+                                    <option value="security">🔒 Security Clearances</option>
+                                    <option value="admin">📋 Admin Support</option>
+                                    <option value="technical">💻 Tech Support</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">To Client</label>
+                                <input
+                                    type="text"
+                                    value={clientName}
+                                    readOnly
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                                <select
+                                    value={composeForm.priority}
+                                    onChange={(e) => setComposeForm({ ...composeForm, priority: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                    <option value="low">🟢 Low</option>
+                                    <option value="medium">🟡 Medium</option>
+                                    <option value="high">🔴 High</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                                <input
+                                    type="text"
+                                    value={composeForm.subject}
+                                    onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                                    placeholder="Enter message subject"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                                <textarea
+                                    value={composeForm.body}
+                                    onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
+                                    placeholder="Enter your message to the client..."
+                                    rows={6}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Attachments (Optional)</label>
+                                <FileUpload 
+                                    selectedFiles={selectedFiles}
+                                    onFilesChange={setSelectedFiles}
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setComposeModal(false)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 filter-active-blue text-white rounded-lg hover:opacity-90 transition-all"
+                                >
+                                    📤 Send to Client
+                                </button>
+                            </div>
+                        </form>
+                    </Modal>
+
+                    {/* Read Message Modal */}
+                    <Modal
+                        isOpen={readModal.isOpen}
+                        onClose={() => setReadModal({ isOpen: false, message: null })}
+                        title={`Message from ${readModal.message?.fromName || ''}`}
+                        maxWidth="max-w-3xl"
+                    >
+                        {readModal.message && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="text-sm text-gray-600 mb-1">
+                                            From: {readModal.message.fromName}
+                                        </div>
+                                        <h3 className="text-xl font-bold text-gray-900">
+                                            {readModal.message.subject}
+                                        </h3>
+                                    </div>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
+                                        readModal.message.priority === 'high' ? 'bg-red-100 text-red-700' :
+                                        readModal.message.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-green-100 text-green-700'
+                                    }`}>
+                                        {readModal.message.priority} Priority
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center text-sm text-gray-600 pb-4 border-b border-gray-200">
+                                    <div>{formatDate(readModal.message.timestamp)}</div>
+                                    <div>📂 {readModal.message.category}</div>
+                                </div>
+
+                                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                    {readModal.message.message}
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        onClick={() => setReadModal({ isOpen: false, message: null })}
+                                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                    <button
+                                        onClick={() => handleReplyToMessage(readModal.message.id)}
+                                        className="px-4 py-2 filter-active-blue text-white rounded-lg hover:opacity-90 transition-all"
+                                    >
+                                        Reply
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </Modal>
+
+                    {/* Success Modal */}
+                    <SuccessModal
+                        isOpen={successModal.isOpen}
+                        onClose={() => setSuccessModal({ ...successModal, isOpen: false })}
+                        title={successModal.title}
+                        message={successModal.message}
+                        type={successModal.type}
+                    />
+
+                    {/* Confirmation Modal */}
+                    <ConfirmModal
+                        isOpen={confirmModal.isOpen}
+                        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                        onConfirm={confirmModal.onConfirm}
+                        title={confirmModal.title}
+                        message={confirmModal.message}
+                        confirmText={confirmModal.confirmText}
+                        type={confirmModal.type}
+                    />
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<AusClearMessages />, document.getElementById('root'));
+    </script>
+</body>
+</html>
